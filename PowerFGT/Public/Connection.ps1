@@ -195,25 +195,30 @@ function Connect-FGT {
             if ($null -eq $Credentials) {
                 $Credentials = Get-Credential -Message 'Please enter administrative credentials for your FortiGate'
             }
-            $postParams = @{username = $Credentials.username; secretkey = $Credentials.GetNetworkCredential().Password; ajax = 1 }
-            $uri = $url + "logincheck"
+            $postParams = @{username = $Credentials.username; password = $Credentials.GetNetworkCredential().Password; secretkey = $Credentials.GetNetworkCredential().Password; request_key = $true ; ajax = 1 }
+
+            write-verbose ($postParams | ConvertTo-Json)
+            $uri = $url + "api/v2/authentication"
+            write-verbose $uri
             $iwrResponse = $null
             try {
-                $iwrResponse = Invoke-WebRequest $uri -Method POST -Body $postParams -SessionVariable FGT @invokeParams
+                $iwrResponse = Invoke-RestMethod $uri -Method POST -Body ($postParams | ConvertTo-Json ) -SessionVariable FGT @invokeParams
             }
             catch {
                 Show-FGTException $_
                 throw "Unable to connect to FortiGate"
             }
-
+            write-verbose $uri
+            write-verbose ($iwrResponse | Convertto-json)
             #With from FortiOS 7.6(.3), the status is now return with json {....
             if ( $iwrResponse.Content[0] -eq "{") {
                 $json = $iwrResponse.Content | ConvertFrom-Json
                 $status = $json.status
-            } else {
-                 $status = $iwrResponse.Content[0]
             }
-
+            else {
+                $status = $iwrResponse.Content[0]
+            }
+            $status = $iwrResponse.status
             #check if need token...
             if ( $status -eq "3") {
                 if ( $PsBoundParameters.ContainsKey('token_code') -or $PsBoundParameters.ContainsKey('token_prompt') ) {
@@ -252,7 +257,7 @@ function Connect-FGT {
                     }
                 }
             }
-
+            $cookies
             #Search crsf cookie and to X-CSRFTOKEN
             $cookies = $FGT.Cookies.GetCookies($uri)
             foreach ($cookie in $cookies) {
