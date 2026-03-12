@@ -129,35 +129,28 @@ function Invoke-FGTRestMethod {
         $invokeParams = $connection.invokeParams
         $sessionvariable = $connection.session
 
-        if ($httpOnly) {
-            $fullurl = "http://${Server}:${port}/${uri}"
-        }
-        else {
-            $fullurl = "https://${Server}:${port}/${uri}"
-        }
-
+        $url = $uri
         if ( $PsBoundParameters.ContainsKey('uri_escape') ) {
-            $fullurl += "/" + ((($uri_escape -replace ("%", "%25")) -replace ("/", "%2f")) -replace ("\?", "%3f"))
+            $url += "/" + ((($uri_escape -replace ("%", "%25")) -replace ("/", "%2f")) -replace ("\?", "%3f"))
         }
-
         #Extra parameter...
-        if ($fullurl -NotMatch "\?") {
-            $fullurl += "?"
+        if ($url -NotMatch "\?") {
+            $url += "?"
         }
 
         if ( $PsBoundParameters.ContainsKey('meta') ) {
-            $fullurl += "&with_meta=1"
+            $url += "&with_meta=1"
         }
         if ( $PsBoundParameters.ContainsKey('skip') ) {
-            $fullurl += "&skip=1"
+            $url += "&skip=1"
         }
         if ( $PsBoundParameters.ContainsKey('vdom') ) {
             $vdom = $vdom -Join ','
-            $fullurl += "&vdom=$vdom"
+            $url += "&vdom=$vdom"
         }
         elseif ($connection.vdom) {
             $vdom = $connection.vdom -Join ','
-            $fullurl += "&vdom=$vdom"
+            $url += "&vdom=$vdom"
         }
 
         #filter only when there is a filter_attribute and filter_value
@@ -183,44 +176,100 @@ function Invoke-FGTRestMethod {
         }
 
         if ( $filter ) {
-            $fullurl += "&filter=$filter"
+            $url += "&filter=$filter"
         }
 
         if ( $PsBoundParameters.ContainsKey('extra') ) {
-            $fullurl += $extra
+            $url += $extra
         }
 
-        #Display (Full)url when verbose (no longer available with PS 7.2.x...)
-        Write-Verbose $fullurl
+        if ($connection.fmg) {
 
-        try {
-            if ($body) {
+            $sessionvariable = $connection.websession
+            $fullurl = "https://${Server}:${port}/jsonrpc"
 
-                #don't use pipeline to convertto-json because remove array...
-                $jbody = ConvertTo-Json $body -Depth 10
-                Write-Verbose -message ($jbody)
+            $target = "adom/$($connection.fmg.adom)/device/$($connection.fmg.target)"
 
-                $response = Invoke-RestMethod $fullurl -Method $method -body (ConvertTo-Json $body -Depth 10 -Compress) -Headers $headers -WebSession $sessionvariable @invokeParams
+            $data = @{
+                target   = @($target)
+                action   = $method
+                resource = "/" + $url
+                payload  = $body
             }
-            else {
-                $response = Invoke-RestMethod $fullurl -Method $method -Headers $headers -WebSession $sessionvariable @invokeParams
+            $params = @{
+                url  = "sys/proxy/json"
+                data = $data
+
             }
-        }
 
-        catch {
-            Show-FGTException $_
-            throw "Unable to use FortiGate API"
-        }
+            $irm_body = @{
+                id      = $connection.id++
+                method  = "exec"
+                session = $connection.session
+                verbose = 1
+                params  = @($params)
+            }
 
-        #Fix encoding with PS 5...
-        if (("Desktop" -eq $PSVersionTable.PsEdition) -or ($null -eq $PSVersionTable.PsEdition)) {
-            $encoding = [System.Text.Encoding]::GetEncoding('ISO-8859-1')
-            (([System.Text.Encoding]::UTF8).GetString($encoding.GetBytes(($response | ConvertTo-json -Depth 10 -Compress)))) | ConvertFrom-Json
+            try {
+                Write-Verbose $fullurl
+                Write-Verbose -message ($irm_body | ConvertTo-Json -Depth 10)
+
+                $response = Invoke-RestMethod $fullurl -Method "POST" -body ($irm_body | ConvertTo-Json -Depth 10 -Compress) -Headers $headers -WebSession $sessionvariable @invokeParams
+            }
+
+            catch {
+                Show-FGTException $_
+                throw "Unable to use FortiManager API"
+            }
+
+            #Check status code
+            Write-Verbose $response.result.status.code
+            if ($response.result.status.code -ne "0") {
+                throw "Unable to use FortiManager API (" + $response.result.status.code + ") " + $response.result.status.message
+            }
+            #Write-host $response.result.data.response.results
+            Write-verbose ($response.result.data.response | Convertto-json)
+            $response.result.data.response
         }
         else {
-            $response
-        }
 
+            if ($httpOnly) {
+                $fullurl = "http://${Server}:${port}/{$url}"
+            }
+            else {
+                $fullurl = "https://${Server}:${port}/${url}"
+            }
+
+            #Display (Full)url when verbose (no longer available with PS 7.2.x...)
+            Write-Verbose $fullurl
+            try {
+                if ($body) {
+
+                    #don't use pipeline to convertto-json because remove array...
+                    $jbody = ConvertTo-Json $body -Depth 10
+                    Write-Verbose -message ($jbody)
+
+                    $response = Invoke-RestMethod $fullurl -Method $method -body (ConvertTo-Json $body -Depth 10 -Compress) -Headers $headers -WebSession $sessionvariable @invokeParams
+                }
+                else {
+                    $response = Invoke-RestMethod $fullurl -Method $method -Headers $headers -WebSession $sessionvariable @invokeParams
+                }
+            }
+
+            catch {
+                Show-FGTException $_
+                throw "Unable to use FortiGate API"
+            }
+
+            #Fix encoding with PS 5...
+            if (("Desktop" -eq $PSVersionTable.PsEdition) -or ($null -eq $PSVersionTable.PsEdition)) {
+                $encoding = [System.Text.Encoding]::GetEncoding('ISO-8859-1')
+                (([System.Text.Encoding]::UTF8).GetString($encoding.GetBytes(($response | ConvertTo-json -Depth 10 -Compress)))) | ConvertFrom-Json
+            }
+            else {
+                $response
+            }
+        }
     }
 
 }
