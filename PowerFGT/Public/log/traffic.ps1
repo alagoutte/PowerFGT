@@ -55,33 +55,25 @@ function Get-FGTLogTraffic {
         [Parameter (Mandatory = $false)]
         [int]$rows = 20,
         [Parameter (Mandatory = $false)]
-        [Parameter (ParameterSetName = "srcip")]
         [string]$srcip,
         [Parameter (Mandatory = $false)]
-        [Parameter (ParameterSetName = "srcintf")]
         [string]$srcintf,
         [Parameter (Mandatory = $false)]
-        [Parameter (ParameterSetName = "dstip")]
         [string]$dstip,
         [Parameter (Mandatory = $false)]
-        [Parameter (ParameterSetName = "dstinf")]
         [string]$dstintf,
         [Parameter (Mandatory = $false)]
         [ValidateRange(0, 65535)]
-        [Parameter (ParameterSetName = "dstport")]
         [int]$dstport,
         [Parameter (Mandatory = $false)]
         [ValidateSet('accept', 'client-rst', 'server-rst', 'close', 'ip-conn', 'timeout', IgnoreCase = $false)]
         [Parameter (ParameterSetName = "action")]
         [string]$action,
         [Parameter (Mandatory = $false)]
-        [Parameter (ParameterSetName = "policyid")]
         [int[]]$policyid,
         [Parameter (Mandatory = $false)]
-        [Parameter (ParameterSetName = "poluuid")]
         [string]$poluuid,
         [Parameter (Mandatory = $false)]
-        [Parameter (ParameterSetName = "duration")]
         [int]$duration,
         [Parameter (Mandatory = $false)]
         [ValidateSet('country_id', 'reverse_lookup', IgnoreCase = $false)]
@@ -95,16 +87,6 @@ function Get-FGTLogTraffic {
         [Parameter (ParameterSetName = "filter")]
         [string]$filter_attribute,
         [Parameter (Mandatory = $false)]
-        [Parameter (ParameterSetName = "srcip")]
-        [Parameter (ParameterSetName = "srcintf")]
-        [Parameter (ParameterSetName = "dstip")]
-        [Parameter (ParameterSetName = "dstinf")]
-        [Parameter (ParameterSetName = "dstport")]
-        [Parameter (ParameterSetName = "action")]
-        [Parameter (ParameterSetName = "policyid")]
-        [Parameter (ParameterSetName = "poluuid")]
-        [Parameter (ParameterSetName = "duration")]
-        [Parameter (ParameterSetName = "filter")]
         [ValidateSet('equal', 'contains')]
         [string]$filter_type = "equal",
         [Parameter (Mandatory = $false)]
@@ -131,45 +113,55 @@ function Get-FGTLogTraffic {
             $invokeParams.add( 'vdom', $vdom )
         }
 
-        switch ( $PSCmdlet.ParameterSetName ) {
-            "srcip" {
-                $filter_value = $srcip
-                $filter_attribute = "srcip"
+        #Operator used in the filter, depending of filter_type (by default equal)
+        switch ( $filter_type ) {
+            "contains" {
+                $filterOperator = "=@"
             }
-            "srcintf" {
-                $filter_value = $srcintf
-                $filter_attribute = "srcintf"
+            default {
+                $filterOperator = "=="
             }
-            "dstip" {
-                $filter_value = $dstip
-                $filter_attribute = "dstip"
-            }
-            "dstintf" {
-                $filter_value = $dstintf
-                $filter_attribute = "dstintf"
-            }
-            "dstport" {
-                $filter_value = $dstport
-                $filter_attribute = "dstport"
-            }
-            "action" {
-                $filter_value = $action
-                $filter_attribute = "action"
-            }
-            "policyid" {
-                $filter_value = $policyid
-                $filter_attribute = "policyid"
-            }
-            "poluuid" {
-                $filter_value = $poluuid
-                $filter_attribute = "poluuid"
-            }
-            "duration" {
-                $filter_value = [string]$duration
-                $filter_attribute = "duration"
-            }
-            default { }
         }
+
+        #Build the list of filter conditions from all the parameters provided (they are combined with a logical AND)
+        $filterParts = @()
+
+        if ( $PsBoundParameters.ContainsKey('srcip') ) {
+            $filterParts += "srcip${filterOperator}${srcip}"
+        }
+
+        if ( $PsBoundParameters.ContainsKey('srcintf') ) {
+            $filterParts += "srcintf${filterOperator}${srcintf}"
+        }
+
+        if ( $PsBoundParameters.ContainsKey('dstip') ) {
+            $filterParts += "dstip${filterOperator}${dstip}"
+        }
+
+        if ( $PsBoundParameters.ContainsKey('dstintf') ) {
+            $filterParts += "dstintf${filterOperator}${dstintf}"
+        }
+
+        if ( $PsBoundParameters.ContainsKey('dstport') ) {
+            $filterParts += "dstport${filterOperator}${dstport}"
+        }
+
+        if ( $PsBoundParameters.ContainsKey('action') ) {
+            $filterParts += "action${filterOperator}${action}"
+        }
+
+        if ( $PsBoundParameters.ContainsKey('policyid') ) {
+            $filterParts += "policyid${filterOperator}$($policyid -join ',')"
+        }
+
+        if ( $PsBoundParameters.ContainsKey('poluuid') ) {
+            $filterParts += "poluuid${filterOperator}${poluuid}"
+        }
+
+        if ( $PsBoundParameters.ContainsKey('duration') ) {
+            $filterParts += "duration${filterOperator}${duration}"
+        }
+
 
         if ( $PsBoundParameters.ContainsKey('extra') -or $PsBoundParameters.ContainsKey('since')) {
             $filter = ""
@@ -198,11 +190,9 @@ function Get-FGTLogTraffic {
 
         }
 
-        #if filter value and filter_attribute, add filter (by default filter_type is equal)
-        if ( $filter_value -and $filter_attribute ) {
-            $invokeParams.add( 'filter_value', $filter_value )
-            $invokeParams.add( 'filter_attribute', $filter_attribute )
-            $invokeParams.add( 'filter_type', $filter_type )
+        #if there is at least one filter condition, add it (multiple conditions are combined with a logical AND)
+        if ( $filterParts.Count -gt 0 ) {
+            $invokeParams.add( 'filter', ($filterParts -join '&filter=') )
         }
 
         if ($type -eq "fortianalyzer") {
