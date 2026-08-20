@@ -64,7 +64,7 @@ function Get-FGTLogTraffic {
         [Parameter (ParameterSetName = "dstip")]
         [string]$dstip,
         [Parameter (Mandatory = $false)]
-        [Parameter (ParameterSetName = "dstinf")]
+        [Parameter (ParameterSetName = "dstintf")]
         [string]$dstintf,
         [Parameter (Mandatory = $false)]
         [ValidateRange(0, 65535)]
@@ -98,7 +98,7 @@ function Get-FGTLogTraffic {
         [Parameter (ParameterSetName = "srcip")]
         [Parameter (ParameterSetName = "srcintf")]
         [Parameter (ParameterSetName = "dstip")]
-        [Parameter (ParameterSetName = "dstinf")]
+        [Parameter (ParameterSetName = "dstintf")]
         [Parameter (ParameterSetName = "dstport")]
         [Parameter (ParameterSetName = "action")]
         [Parameter (ParameterSetName = "policyid")]
